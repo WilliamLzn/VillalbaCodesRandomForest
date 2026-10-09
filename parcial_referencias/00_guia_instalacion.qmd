@@ -1,0 +1,167 @@
+---
+title: "00 · Guía de instalación, render y migración (Quarto → PDF y HTML)"
+subtitle: "Qué instalar, cómo compilar los documentos y cómo migrar a RStudio Cloud"
+date: today
+lang: es
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    toc-location: left
+    theme: cosmo
+  pdf:
+    toc: true
+    documentclass: article
+    geometry:
+      - margin=2cm
+    fontsize: 10pt
+    colorlinks: true
+---
+
+# Mapa de esta carpeta
+
+| archivo | qué contiene | prioridad de estudio |
+|---|---|---|
+| `00_guia_instalacion.qmd` | este documento | léelo 1 vez |
+| `01_gini_a_mano.qmd` | **el solver del ejercicio del parcial**: las 10 versiones de la actividad resueltas (Gini, cortes, árbol, matriz, métricas) + plantilla para datos nuevos | ★★★ |
+| `02_arbol_sklearn_argumentos.qmd` | el laboratorio del árbol reproducido: argumentos, búsqueda exhaustiva a mano, `tree_`, `plot_tree`, `export_text`, `predict_proba`, efecto de cada argumento, métricas | ★★★ |
+| `03_random_forest.qmd` | el bosque: bagging, OOB, `n_estimators`, `max_features`, importancia, árbol vs bosque, lo citable del paper (Kinect) | ★★★ |
+| `04_metricas.qmd` | matriz de confusión y métricas con mini-solver (pega tus predicciones y sale todo) | ★★ |
+| `05_cheatsheet.qmd` | TODO condensado en una hoja: fórmulas, reglas de oro, código, respuestas de las 10 versiones | ★★★ (última lectura antes del parcial) |
+| `06_knn.qmd` | **KNN**: distancias y escalado a mano (con casos donde escalar cambia la predicción), `KNeighborsClassifier` + `StandardScaler`, efecto de `k`, frontera de decisión | ★★★ |
+| `datos/cartera_curso.csv` | la cartera de 400 clientes (separador `;`, decimal `,`) | — |
+
+Renderiza **ambos formatos** de cada uno: el **PDF para imprimir/leer** y
+el **HTML para buscar rápido** (Ctrl+F).
+
+# Requisitos (instalación local en Windows)
+
+## 1. Quarto
+
+Descarga e instala desde <https://quarto.org/docs/download/>. Verifica en
+PowerShell:
+
+```
+quarto --version
+```
+
+## 2. Python + paquetes
+
+Los documentos usan el motor **jupyter** de Python. Necesitas Python 3.10+
+(desde <https://www.python.org>, marca "Add to PATH" al instalar) y estos
+paquetes (PowerShell):
+
+```
+pip install numpy pandas scikit-learn matplotlib jupyter ipykernel
+```
+
+| paquete | para qué | obligatorio |
+|---|---|---|
+| `numpy` | aritmética de arreglos | sí |
+| `pandas` | tablas y lectura del CSV | sí |
+| `scikit-learn` | `DecisionTreeClassifier`, `RandomForestClassifier`, métricas | sí |
+| `matplotlib` | `plot_tree` y figuras | sí |
+| `jupyter` + `ipykernel` | Quarto ejecuta los bloques con este kernel | sí |
+| `tinytex` | LaTeX para generar PDF | sí (solo para PDF) |
+
+## 3. LaTeX para el PDF
+
+Quarto necesita una distribución LaTeX. La más liviana es TinyTeX y se
+instala **desde el propio Quarto** (PowerShell):
+
+```
+quarto install tinytex
+```
+
+(Ya instalado, se puede actualizar con `quarto update tinytex`.)
+
+## 4. Editores (opcional pero cómodo)
+
+* **RStudio Desktop** (gratis): trae Quarto integrado — abre el `.qmd` y
+  presiona el botón **Render**. Descarga: <https://posit.co/downloads/>.
+* **VS Code**: instala las extensiones **Quarto** (quarto.quarto) y
+  **Python** (ms-python.python) desde el marketplace; con `Ctrl+Shift+P` →
+  "Quarto: Render" o el botón Preview.
+
+# Cómo renderizar
+
+En PowerShell, parado dentro de `parcial_referencias/`:
+
+```
+# un documento a HTML y PDF (ambos formatos del YAML):
+quarto render 01_gini_a_mano.qmd
+
+# o pidiendo el formato explícitamente:
+quarto render 01_gini_a_mano.qmd --to html
+quarto render 01_gini_a_mano.qmd --to pdf
+
+# TODOS los documentos de golpe (PowerShell):
+Get-ChildItem *.qmd | ForEach-Object { quarto render $_.Name }
+```
+
+La primera renderización arranca el kernel de jupyter y demora un poco
+más; las siguientes son rápidas.
+
+# Migrar a RStudio Cloud
+
+RStudio Cloud (<https://posit.cloud>) ya trae Quarto y R, pero para estos
+documentos (Python) hay que preparar el entorno:
+
+1. **Crear el proyecto**: New Project → New RStudio Project.
+2. **Subir los archivos**: en el panel Files → Upload: sube los `.qmd` y
+   la carpeta `datos/` (o sube un `.zip` de toda la carpeta y usa
+   `unzip archivo.zip` en la pestaña **Terminal**).
+3. **Instalar Python y paquetes** (pestaña Terminal del proyecto):
+
+   ```
+   sudo apt update
+   sudo apt install -y python3 python3-pip
+   pip3 install --user numpy pandas scikit-learn matplotlib jupyter ipykernel
+   python3 -m ipykernel install --user --name python3
+   ```
+
+   (En RStudio Cloud esto corre como root; `pip3 install --user` es lo
+   recomendado ahí.)
+4. **LaTeX para PDF** (solo si vas a generar PDF en la nube; el HTML no
+   lo necesita):
+
+   ```
+   quarto install tinytex
+   ```
+
+   (o desde R: `tinytex::install_tinytex()`).
+5. **Renderizar**: abre un `.qmd` y presiona el botón **Render**, o en la
+   Terminal:
+
+   ```
+   quarto render 01_gini_a_mano.qmd
+   ```
+
+6. **Descargar resultados**: en Files, marca los `.html`/`.pdf` → More →
+   Export.
+
+**Orden de supervivencia en la nube**: si algo falla con Python, genera
+al menos el `05_cheatsheet` (es casi todo texto y tablas) y el `00` (no
+ejecuta código) — esos dos no dependen del kernel.
+
+# Problemas comunes (y su solución)
+
+| mensaje | causa | solución |
+|---|---|---|
+| `Unable to locate jupyter` / kernel no encontrado | falta jupyter/ipykernel | `pip install jupyter ipykernel` |
+| `LaTeX installation not found` al pedir PDF | no hay LaTeX | `quarto install tinytex` |
+| `FileNotFoundError: ...cartera_curso.csv` | la ruta relativa no coincide | ejecuta Quarto desde dentro de `parcial_referencias/` o ajusta `"datos/cartera_curso.csv"` en los bloques `datos` |
+| acentos raros en el PDF | (no debería pasar: los `.qmd` están en UTF-8) | asegúrate de NO re-guardar los archivos con otro encoding |
+| `quarto` no se reconoce como comando | Quarto no está en el PATH | reinstala Quarto marcando "Add to PATH" o usa la ruta completa |
+| el PDF sale sin figuras | LaTeX incompleto | `quarto update tinytex` |
+| pantalla/jupyter congelado en el primer render | arranque del kernel | espera 1-2 minutos la primera vez |
+
+# Lista de verificación antes del parcial
+
+- [ ] Renderizar los 6 documentos a **PDF** y guardarlos (móvil/USB/imprimir).
+- [ ] Renderizar a **HTML** también: en el examen se puede buscar con Ctrl+F.
+- [ ] Leer el `05_cheatsheet` completo (10 minutos).
+- [ ] Identificar **qué versión** te tocó en la actividad de clase y mirar
+      sus respuestas en las tablas del `01` y del `05`.
+- [ ] Tener a la mano: `datos/cartera_curso.csv` (por si piden reproducir
+      el laboratorio) y saber que se lee con `sep=";", decimal=","`.

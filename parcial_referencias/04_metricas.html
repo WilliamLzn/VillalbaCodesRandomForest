@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="es" xml:lang="es"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>04 · Matriz de confusión y métricas: cómo se calculan y cómo se llaman bien</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script><script src="04_metricas_files/libs/clipboard/clipboard.min.js"></script>
+<script src="04_metricas_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="04_metricas_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="04_metricas_files/libs/quarto-html/popper.min.js"></script>
+<script src="04_metricas_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="04_metricas_files/libs/quarto-html/anchor.min.js"></script>
+<link href="04_metricas_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="04_metricas_files/libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="04_metricas_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="04_metricas_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="04_metricas_files/libs/bootstrap/bootstrap-62e2d20df198e8a01bb734742f2e28cf.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article toc-left">
+<div id="quarto-sidebar-toc-left" class="sidebar toc-left">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Tabla de contenidos</h2>
+   
+  <ul class="collapse">
+  <li><a href="#para-qué-sirve-este-documento" id="toc-para-qué-sirve-este-documento" class="nav-link active" data-scroll-target="#para-qué-sirve-este-documento"><span class="header-section-number">1</span> Para qué sirve este documento</a></li>
+  <li><a href="#la-matriz-de-confusión-el-orden-importa" id="toc-la-matriz-de-confusión-el-orden-importa" class="nav-link" data-scroll-target="#la-matriz-de-confusión-el-orden-importa"><span class="header-section-number">2</span> La matriz de confusión: el orden importa</a></li>
+  <li><a href="#el-mini-solver" id="toc-el-mini-solver" class="nav-link" data-scroll-target="#el-mini-solver"><span class="header-section-number">3</span> El mini-solver</a></li>
+  <li><a href="#las-llamadas-correctas-argumentos-por-nombre" id="toc-las-llamadas-correctas-argumentos-por-nombre" class="nav-link" data-scroll-target="#las-llamadas-correctas-argumentos-por-nombre"><span class="header-section-number">4</span> Las llamadas correctas (argumentos por nombre)</a></li>
+  <li><a href="#los-dos-errores-y-el-negocio" id="toc-los-dos-errores-y-el-negocio" class="nav-link" data-scroll-target="#los-dos-errores-y-el-negocio"><span class="header-section-number">5</span> Los dos errores y el negocio</a></li>
+  <li><a href="#casos-esquina-para-no-perder-puntos-por-descuido" id="toc-casos-esquina-para-no-perder-puntos-por-descuido" class="nav-link" data-scroll-target="#casos-esquina-para-no-perder-puntos-por-descuido"><span class="header-section-number">6</span> Casos esquina (para no perder puntos por descuido)</a></li>
+  </ul>
+<div class="quarto-alternate-formats"><h2>Otros formatos</h2><ul><li><a href="04_metricas.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li></ul></div></nav>
+</div>
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">04 · Matriz de confusión y métricas: cómo se calculan y cómo se llaman bien</h1>
+<p class="subtitle lead">Machine Learning · UTB 2026-II · Mini-solver: pega tus predicciones y sale todo</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+    <div>
+    <div class="quarto-title-meta-heading">Fecha de publicación</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">9 de octubre de 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="para-qué-sirve-este-documento" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> Para qué sirve este documento</h1>
+<p>Referencia rápida de <strong>todas</strong> las métricas de clasificación binaria: la matriz de confusión (con el orden exacto que devuelve scikit-learn), la llamada correcta de cada métrica con <strong>argumentos por nombre</strong>, y un <strong>mini-solver</strong> al que le pegas tus vectores <code>y_real</code> e <code>y_pred</code> y te devuelve la tabla completa con interpretación.</p>
+</section>
+<section id="la-matriz-de-confusión-el-orden-importa" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> La matriz de confusión: el orden importa</h1>
+<p>Con <strong>positivo = mora = 1</strong> (la convención del curso):</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th>Predicho 1 (mora)</th>
+<th>Predicho 0 (paga)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Real 1 (mora)</strong></td>
+<td>VP (verdadero positivo)</td>
+<td>FN (falso negativo: se coló)</td>
+</tr>
+<tr class="even">
+<td><strong>Real 0 (paga)</strong></td>
+<td>FP (falso positivo: marqué a un bueno)</td>
+<td>VN (verdadero negativo)</td>
+</tr>
+</tbody>
+</table>
+<p>En scikit-learn, <code>confusion_matrix(y_true, y_pred, labels=[0, 1])</code> devuelve las celdas en ese orden de clases, y **<code>.ravel()</code> las aplana así:</p>
+<p><span class="math display">\[\texttt{VN, FP, FN, VP}\]</span></p>
+<p>— es decir: <strong>fila por fila</strong> (primero la fila del 0, luego la del 1). Ese orden es LA trampa clásica: desempaquetar como <code>VP, FN, FP, VN</code> da todos los valores intercambiados.</p>
+<div id="setup" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-label="1"></a><span class="co"># =====================================================================</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-label="2"></a><span class="co"># IMPORTS mínimos: solo métricas. Este documento no entrena nada:</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-label="3"></a><span class="co"># trabaja con vectores de predicciones que tú le pasas.</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-label="4"></a><span class="co"># =====================================================================</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-label="5"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-6"><a href="#cb1-6" aria-label="6"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-7"><a href="#cb1-7" aria-label="7"></a><span class="im">from</span> IPython.display <span class="im">import</span> Markdown, display</span>
+<span id="cb1-8"><a href="#cb1-8" aria-label="8"></a><span class="im">from</span> sklearn.metrics <span class="im">import</span> (accuracy_score, precision_score, recall_score,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-label="9"></a>                             f1_score, confusion_matrix)</span>
+<span id="cb1-10"><a href="#cb1-10" aria-label="10"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-label="11"></a><span class="kw">def</span> texto(md):</span>
+<span id="cb1-12"><a href="#cb1-12" aria-label="12"></a>    <span class="co">"""Imprime Markdown enriquecido."""</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-label="13"></a>    display(Markdown(md))</span></code></pre></div><button title="Copiar al portapapeles" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="orden-ravel" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-label="1"></a><span class="co"># Demostración de una vez por todas del orden de .ravel():</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-label="2"></a><span class="co"># una matriz inventada con valores distintos en cada celda.</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-label="3"></a>demo <span class="op">=</span> confusion_matrix(y_true<span class="op">=</span>[<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">1</span>], y_pred<span class="op">=</span>[<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">1</span>],</span>
+<span id="cb2-4"><a href="#cb2-4" aria-label="4"></a>                        labels<span class="op">=</span>[<span class="dv">0</span>, <span class="dv">1</span>])      <span class="co"># labels=[0,1] FIJA el orden de clases</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-label="5"></a><span class="bu">print</span>(demo)                                 <span class="co"># [[VN, FP], [FN, VP]]</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-label="6"></a>VN, FP, FN, VP <span class="op">=</span> demo.ravel()               <span class="co"># el orden correcto al desempaquetar</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-label="7"></a><span class="bu">print</span>(<span class="ss">f"VN=</span><span class="sc">{</span>VN<span class="sc">}</span><span class="ss"> FP=</span><span class="sc">{</span>FP<span class="sc">}</span><span class="ss"> FN=</span><span class="sc">{</span>FN<span class="sc">}</span><span class="ss"> VP=</span><span class="sc">{</span>VP<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copiar al portapapeles" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[[1 1]
+ [1 1]]
+VN=1 FP=1 FN=1 VP=1</code></pre>
+</div>
+</div>
+</section>
+<section id="el-mini-solver" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> El mini-solver</h1>
+<div id="solver" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-label="1"></a><span class="co"># =====================================================================</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-label="2"></a><span class="co"># ╔═════════════════════════════════════════════════════════════════╗</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-label="3"></a><span class="co"># ║  CAMBIA AQUÍ: pega tus vectores de verdad y de predicción.       ║</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-label="4"></a><span class="co"># ║  1 = positivo (mora / sí tomó), 0 = negativo (paga / no tomó).   ║</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-label="5"></a><span class="co"># ╚═══════════════════════════════════════════════════════════════╝</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-label="6"></a><span class="co"># Este ejemplo es la versión V06 de la actividad: exactitud 0.625</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-label="7"></a><span class="co"># contra tasa base 0.750 -&gt; NO la supera (el caso interesante).</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-label="8"></a>y_real  <span class="op">=</span> [<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>]     <span class="co"># &lt;- lo que de verdad pasó</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-label="9"></a>y_pred  <span class="op">=</span> [<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">1</span>]     <span class="co"># &lt;- lo que predijo tu árbol</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-label="10"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-label="11"></a><span class="kw">def</span> reporte_metricas(y_real, y_pred, nombre_positivo<span class="op">=</span><span class="st">"mora"</span>,</span>
+<span id="cb4-12"><a href="#cb4-12" aria-label="12"></a>                    nombre_negativo<span class="op">=</span><span class="st">"paga"</span>):</span>
+<span id="cb4-13"><a href="#cb4-13" aria-label="13"></a>    <span class="co">"""Calcula matriz, métricas e interpretación desde dos vectores.</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-label="14"></a></span>
+<span id="cb4-15"><a href="#cb4-15" aria-label="15"></a><span class="co">    Devuelve un DataFrame con todo. La interpretación de cada métrica</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-label="16"></a><span class="co">    se escribe en el lenguaje del banco (positivo=negocio riesgoso).</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-label="17"></a><span class="co">    """</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-label="18"></a>    y_real <span class="op">=</span> np.asarray(y_real)<span class="op">;</span> y_pred <span class="op">=</span> np.asarray(y_pred)</span>
+<span id="cb4-19"><a href="#cb4-19" aria-label="19"></a>    n <span class="op">=</span> <span class="bu">len</span>(y_real)</span>
+<span id="cb4-20"><a href="#cb4-20" aria-label="20"></a>    p <span class="op">=</span> y_real.mean()                                   <span class="co"># proporción de positivos</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-label="21"></a>    <span class="co"># ---- matriz de confusión: labels=[0,1] fija filas/columnas 0 y 1</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-label="22"></a>    cm <span class="op">=</span> confusion_matrix(y_true<span class="op">=</span>y_real, y_pred<span class="op">=</span>y_pred, labels<span class="op">=</span>[<span class="dv">0</span>, <span class="dv">1</span>])</span>
+<span id="cb4-23"><a href="#cb4-23" aria-label="23"></a>    VN, FP, FN, VP <span class="op">=</span> cm.ravel()                         <span class="co"># ¡VN, FP, FN, VP!</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-label="24"></a>    <span class="co"># ---- métricas a mano (para enseñar) y con sklearn (para verificar)</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-label="25"></a>    exactitud_manual  <span class="op">=</span> (VP <span class="op">+</span> VN) <span class="op">/</span> n</span>
+<span id="cb4-26"><a href="#cb4-26" aria-label="26"></a>    precision_manual <span class="op">=</span> VP <span class="op">/</span> (VP <span class="op">+</span> FP) <span class="cf">if</span> VP <span class="op">+</span> FP <span class="cf">else</span> <span class="fl">0.0</span></span>
+<span id="cb4-27"><a href="#cb4-27" aria-label="27"></a>    recall_manual    <span class="op">=</span> VP <span class="op">/</span> (VP <span class="op">+</span> FN) <span class="cf">if</span> VP <span class="op">+</span> FN <span class="cf">else</span> <span class="fl">0.0</span></span>
+<span id="cb4-28"><a href="#cb4-28" aria-label="28"></a>    f1_manual        <span class="op">=</span> (<span class="dv">2</span> <span class="op">*</span> precision_manual <span class="op">*</span> recall_manual <span class="op">/</span></span>
+<span id="cb4-29"><a href="#cb4-29" aria-label="29"></a>                        (precision_manual <span class="op">+</span> recall_manual)</span>
+<span id="cb4-30"><a href="#cb4-30" aria-label="30"></a>                        <span class="cf">if</span> precision_manual <span class="op">+</span> recall_manual <span class="cf">else</span> <span class="fl">0.0</span>)</span>
+<span id="cb4-31"><a href="#cb4-31" aria-label="31"></a>    tasa_base <span class="op">=</span> <span class="bu">max</span>(p, <span class="dv">1</span> <span class="op">-</span> p)                           <span class="co"># el tonto que dice</span></span>
+<span id="cb4-32"><a href="#cb4-32" aria-label="32"></a>                                                         <span class="co"># siempre la mayoritaria</span></span>
+<span id="cb4-33"><a href="#cb4-33" aria-label="33"></a>    <span class="co"># ---- verificación: sklearn debe dar EXACTAMENTE lo mismo</span></span>
+<span id="cb4-34"><a href="#cb4-34" aria-label="34"></a>    <span class="cf">assert</span> np.isclose(exactitud_manual,  accuracy_score(y_true<span class="op">=</span>y_real, y_pred<span class="op">=</span>y_pred))</span>
+<span id="cb4-35"><a href="#cb4-35" aria-label="35"></a>    <span class="cf">assert</span> np.isclose(precision_manual, precision_score(y_true<span class="op">=</span>y_real,</span>
+<span id="cb4-36"><a href="#cb4-36" aria-label="36"></a>                     y_pred<span class="op">=</span>y_pred, pos_label<span class="op">=</span><span class="dv">1</span>, zero_division<span class="op">=</span><span class="dv">0</span>))</span>
+<span id="cb4-37"><a href="#cb4-37" aria-label="37"></a>    <span class="cf">assert</span> np.isclose(recall_manual, recall_score(y_true<span class="op">=</span>y_real,</span>
+<span id="cb4-38"><a href="#cb4-38" aria-label="38"></a>                     y_pred<span class="op">=</span>y_pred, pos_label<span class="op">=</span><span class="dv">1</span>))</span>
+<span id="cb4-39"><a href="#cb4-39" aria-label="39"></a>    <span class="cf">assert</span> np.isclose(f1_manual, f1_score(y_true<span class="op">=</span>y_real, y_pred<span class="op">=</span>y_pred,</span>
+<span id="cb4-40"><a href="#cb4-40" aria-label="40"></a>                     pos_label<span class="op">=</span><span class="dv">1</span>))</span>
+<span id="cb4-41"><a href="#cb4-41" aria-label="41"></a>    filas <span class="op">=</span> [</span>
+<span id="cb4-42"><a href="#cb4-42" aria-label="42"></a>        (<span class="st">"tasa base"</span>,   <span class="st">"max(p, 1-p)"</span>,          tasa_base),</span>
+<span id="cb4-43"><a href="#cb4-43" aria-label="43"></a>        (<span class="st">"exactitud"</span>,   <span class="st">"(VP+VN)/n"</span>,           exactitud_manual),</span>
+<span id="cb4-44"><a href="#cb4-44" aria-label="44"></a>        (<span class="st">"precisión"</span>,   <span class="st">"VP/(VP+FP)"</span>,          precision_manual),</span>
+<span id="cb4-45"><a href="#cb4-45" aria-label="45"></a>        (<span class="st">"recall"</span>,      <span class="st">"VP/(VP+FN)"</span>,          recall_manual),</span>
+<span id="cb4-46"><a href="#cb4-46" aria-label="46"></a>        (<span class="st">"F1"</span>,          <span class="st">"2·P·R/(P+R)"</span>,         f1_manual),</span>
+<span id="cb4-47"><a href="#cb4-47" aria-label="47"></a>    ]</span>
+<span id="cb4-48"><a href="#cb4-48" aria-label="48"></a>    tab <span class="op">=</span> pd.DataFrame(filas, columns<span class="op">=</span>[<span class="st">"métrica"</span>, <span class="st">"fórmula"</span>, <span class="st">"valor"</span>]).<span class="bu">round</span>(<span class="dv">3</span>)</span>
+<span id="cb4-49"><a href="#cb4-49" aria-label="49"></a>    tab[<span class="st">"¿qué dice?"</span>] <span class="op">=</span> [</span>
+<span id="cb4-50"><a href="#cb4-50" aria-label="50"></a>        <span class="ss">f"acertar prediciendo siempre '</span><span class="sc">{</span>nombre_positivo <span class="cf">if</span> p <span class="op">&gt;=</span> <span class="fl">0.5</span> <span class="cf">else</span> nombre_negativo<span class="sc">}</span><span class="ss">'"</span>,</span>
+<span id="cb4-51"><a href="#cb4-51" aria-label="51"></a>        <span class="ss">f"de cada </span><span class="sc">{</span>n<span class="sc">}</span><span class="ss"> clientes, acierta en </span><span class="sc">{</span>VP<span class="op">+</span>VN<span class="sc">}</span><span class="ss">"</span>,</span>
+<span id="cb4-52"><a href="#cb4-52" aria-label="52"></a>        <span class="ss">f"de los </span><span class="sc">{</span>VP<span class="op">+</span>FP<span class="sc">}</span><span class="ss"> que mandó a </span><span class="sc">{</span>nombre_positivo<span class="sc">}</span><span class="ss">, </span><span class="sc">{</span>VP<span class="sc">}</span><span class="ss"> eran de verdad"</span>,</span>
+<span id="cb4-53"><a href="#cb4-53" aria-label="53"></a>        <span class="ss">f"de los </span><span class="sc">{</span>VP<span class="op">+</span>FN<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>nombre_positivo<span class="sc">}</span><span class="ss"> reales, atrapó </span><span class="sc">{</span>VP<span class="sc">}</span><span class="ss">"</span>,</span>
+<span id="cb4-54"><a href="#cb4-54" aria-label="54"></a>        <span class="st">"media armónica de precisión y recall"</span>]</span>
+<span id="cb4-55"><a href="#cb4-55" aria-label="55"></a>    <span class="cf">return</span> tab, cm, (VP, FN, FP, VN, tasa_base, exactitud_manual)</span>
+<span id="cb4-56"><a href="#cb4-56" aria-label="56"></a></span>
+<span id="cb4-57"><a href="#cb4-57" aria-label="57"></a>tab, cm, (VP, FN, FP, VN, tasa_base, exactitud) <span class="op">=</span> reporte_metricas(y_real, y_pred)</span>
+<span id="cb4-58"><a href="#cb4-58" aria-label="58"></a></span>
+<span id="cb4-59"><a href="#cb4-59" aria-label="59"></a><span class="co"># ---- matriz bonita con totales (como aparece en los informes):</span></span>
+<span id="cb4-60"><a href="#cb4-60" aria-label="60"></a>cm_df <span class="op">=</span> pd.DataFrame(cm,</span>
+<span id="cb4-61"><a href="#cb4-61" aria-label="61"></a>                     index<span class="op">=</span>[<span class="ss">f"real 1 (mora)"</span>, <span class="st">"real 0 (paga)"</span>],</span>
+<span id="cb4-62"><a href="#cb4-62" aria-label="62"></a>                     columns<span class="op">=</span>[<span class="ss">f"pred. 1 (mora)"</span>, <span class="ss">f"pred. 0 (paga)"</span>])</span>
+<span id="cb4-63"><a href="#cb4-63" aria-label="63"></a>cm_df[<span class="st">"total"</span>] <span class="op">=</span> cm_df.<span class="bu">sum</span>(axis<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb4-64"><a href="#cb4-64" aria-label="64"></a>cm_df.loc[<span class="st">"total"</span>] <span class="op">=</span> cm_df.<span class="bu">sum</span>()</span>
+<span id="cb4-65"><a href="#cb4-65" aria-label="65"></a>display(cm_df)</span>
+<span id="cb4-66"><a href="#cb4-66" aria-label="66"></a>display(tab)</span></code></pre></div><button title="Copiar al portapapeles" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="solver-1" class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">pred. 1 (mora)</th>
+<th data-quarto-table-cell-role="th">pred. 0 (paga)</th>
+<th data-quarto-table-cell-role="th">total</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">real 1 (mora)</th>
+<td>4</td>
+<td>2</td>
+<td>6</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">real 0 (paga)</th>
+<td>1</td>
+<td>1</td>
+<td>2</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">total</th>
+<td>5</td>
+<td>3</td>
+<td>8</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+<div id="solver-2" class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">métrica</th>
+<th data-quarto-table-cell-role="th">fórmula</th>
+<th data-quarto-table-cell-role="th">valor</th>
+<th data-quarto-table-cell-role="th">¿qué dice?</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">0</th>
+<td>tasa base</td>
+<td>max(p, 1-p)</td>
+<td>0.750</td>
+<td>acertar prediciendo siempre 'paga'</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">1</th>
+<td>exactitud</td>
+<td>(VP+VN)/n</td>
+<td>0.625</td>
+<td>de cada 8 clientes, acierta en 5</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">2</th>
+<td>precisión</td>
+<td>VP/(VP+FP)</td>
+<td>0.333</td>
+<td>de los 3 que mandó a mora, 1 eran de verdad</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">3</th>
+<td>recall</td>
+<td>VP/(VP+FN)</td>
+<td>0.500</td>
+<td>de los 2 mora reales, atrapó 1</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">4</th>
+<td>F1</td>
+<td>2·P·R/(P+R)</td>
+<td>0.400</td>
+<td>media armónica de precisión y recall</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<div id="interpretacion" class="cell" data-results="hold" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-label="1"></a><span class="co"># La lectura que el parcial pide: ¿supera la tasa base? y el consejo de</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-label="2"></a><span class="co"># precisión/recall según el costo del error.</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-label="3"></a>supera <span class="op">=</span> exactitud <span class="op">&gt;</span> tasa_base</span>
+<span id="cb5-4"><a href="#cb5-4" aria-label="4"></a><span class="bu">print</span>(<span class="ss">f"Exactitud </span><span class="sc">{</span>exactitud<span class="sc">:.3f}</span><span class="ss"> vs tasa base </span><span class="sc">{</span>tasa_base<span class="sc">:.3f}</span><span class="ss"> -&gt;"</span>,</span>
+<span id="cb5-5"><a href="#cb5-5" aria-label="5"></a>      <span class="st">"SÍ la supera: el modelo aprendió algo."</span> <span class="cf">if</span> supera <span class="cf">else</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-label="6"></a>      <span class="st">"NO la supera: peor que predecir la mayoritaria a ciegas; no sirve."</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-label="7"></a><span class="bu">print</span>(<span class="ss">f"VP=</span><span class="sc">{</span>VP<span class="sc">}</span><span class="ss"> FN=</span><span class="sc">{</span>FN<span class="sc">}</span><span class="ss"> FP=</span><span class="sc">{</span>FP<span class="sc">}</span><span class="ss"> VN=</span><span class="sc">{</span>VN<span class="sc">}</span><span class="ss"> | (las 4 celdas suman </span><span class="sc">{</span>VP<span class="op">+</span>FN<span class="op">+</span>FP<span class="op">+</span>VN<span class="sc">}</span><span class="ss">)"</span>)</span></code></pre></div><button title="Copiar al portapapeles" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Exactitud 0.625 vs tasa base 0.750 -&gt; NO la supera: peor que predecir la mayoritaria a ciegas; no sirve.
+VP=1 FN=1 FP=2 VN=4 | (las 4 celdas suman 8)</code></pre>
+</div>
+</div>
+</section>
+<section id="las-llamadas-correctas-argumentos-por-nombre" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> Las llamadas correctas (argumentos por nombre)</h1>
+<div id="llamadas" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-label="1"></a><span class="co"># CÓMO SE LLAMAN BIEN las métricas: con y_true / y_pred explícitos y,</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-label="2"></a><span class="co"># en las que lo tienen, con pos_label=1 (positivo = clase 1).</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-label="3"></a><span class="co"># Estas líneas son 'la respuesta' al punto 15 de la actividad.</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-label="4"></a>clase <span class="op">=</span> y_pred                                  <span class="co"># tus predicciones 0/1</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-label="5"></a>exactitud  <span class="op">=</span> accuracy_score(y_true<span class="op">=</span>y_real, y_pred<span class="op">=</span>clase)</span>
+<span id="cb7-6"><a href="#cb7-6" aria-label="6"></a>precision  <span class="op">=</span> precision_score(y_true<span class="op">=</span>y_real, y_pred<span class="op">=</span>clase,</span>
+<span id="cb7-7"><a href="#cb7-7" aria-label="7"></a>                             pos_label<span class="op">=</span><span class="dv">1</span>, zero_division<span class="op">=</span><span class="dv">0</span>)   <span class="co"># zero_division:</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-label="8"></a>                                                            <span class="co"># qué devolver si</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-label="9"></a>                                                            <span class="co"># VP+FP=0 (evita el</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-label="10"></a>                                                            <span class="co"># warning/errores)</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-label="11"></a>recall     <span class="op">=</span> recall_score(y_true<span class="op">=</span>y_real, y_pred<span class="op">=</span>clase, pos_label<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-label="12"></a>f1         <span class="op">=</span> f1_score(y_true<span class="op">=</span>y_real, y_pred<span class="op">=</span>clase, pos_label<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb7-13"><a href="#cb7-13" aria-label="13"></a>VN2, FP2, FN2, VP2 <span class="op">=</span> confusion_matrix(y_true<span class="op">=</span>y_real, y_pred<span class="op">=</span>clase,</span>
+<span id="cb7-14"><a href="#cb7-14" aria-label="14"></a>                                      labels<span class="op">=</span>[<span class="dv">0</span>, <span class="dv">1</span>]).ravel()</span>
+<span id="cb7-15"><a href="#cb7-15" aria-label="15"></a><span class="bu">print</span>(<span class="bu">dict</span>(exactitud<span class="op">=</span><span class="bu">round</span>(exactitud,<span class="dv">3</span>), precision<span class="op">=</span><span class="bu">round</span>(precision,<span class="dv">3</span>),</span>
+<span id="cb7-16"><a href="#cb7-16" aria-label="16"></a>           recall<span class="op">=</span><span class="bu">round</span>(recall,<span class="dv">3</span>), f1<span class="op">=</span><span class="bu">round</span>(f1,<span class="dv">3</span>),</span>
+<span id="cb7-17"><a href="#cb7-17" aria-label="17"></a>           VN<span class="op">=</span>VN2, FP<span class="op">=</span>FP2, FN<span class="op">=</span>FN2, VP<span class="op">=</span>VP2))</span></code></pre></div><button title="Copiar al portapapeles" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>{'exactitud': 0.625, 'precision': 0.333, 'recall': 0.5, 'f1': 0.4, 'VN': np.int64(4), 'FP': np.int64(2), 'FN': np.int64(1), 'VP': np.int64(1)}</code></pre>
+</div>
+</div>
+</section>
+<section id="los-dos-errores-y-el-negocio" class="level1" data-number="5">
+<h1 data-number="5"><span class="header-section-number">5</span> Los dos errores y el negocio</h1>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>error</th>
+<th>qué pasó</th>
+<th>costo para el banco</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>FN</strong></td>
+<td>era moroso, lo di por buen pagador</td>
+<td><strong>el caro</strong>: prestó y no le pagan (pierde capital)</td>
+</tr>
+<tr class="even">
+<td><strong>FP</strong></td>
+<td>pagaba, lo mandé a mora</td>
+<td>perder el negocio (perdió la ganancia, no el capital)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Si el <strong>FN</strong> es el error caro → querer <strong>más RECALL</strong> (atrapar morosos), aunque caiga la precisión.</li>
+<li>Si el <strong>FP</strong> fuera el caro (p.&nbsp;ej. pierdo clientes valiosos) → querer más <strong>precisión</strong>.</li>
+</ul>
+<p><strong>Precisión y recall tiran en direcciones opuestas</strong>: subir el umbral de “riesgoso” sube la precisión (solo marco a los muy claros) y baja el recall (se me escapan más). El <strong>F1</strong> es el compromiso: media armónica que castiga desequilibrios (si una vale 0, F1 vale 0).</p>
+</section>
+<section id="casos-esquina-para-no-perder-puntos-por-descuido" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> Casos esquina (para no perder puntos por descuido)</h1>
+<ul>
+<li><strong><code>VP + FP = 0</code></strong> (nadie predicho positivo): precisión indefinida → <code>zero_division=0</code> la devuelve como 0 sin warning.</li>
+<li><strong><code>VP + FN = 0</code></strong> (no hay positivos reales): recall indefinido → ídem.</li>
+<li><strong>Hoja empatada</strong> (mitad y mitad): scikit-learn <strong>predice la clase 0</strong> (lo dice la actividad: “si una hoja queda empatada, predice 0”).</li>
+<li><strong>No fijar <code>labels=[0,1]</code></strong>: si el modelo solo predijo una clase, la matriz viene incompleta (2x2 recortada) y <code>.ravel()</code> da otro orden — <strong>siempre</strong> pasar <code>labels=[0, 1]</code>.</li>
+<li><strong>Exactitud con clases desbalanceadas</strong> puede engañar: con 95% de buenos pagadores, decir “todos buenos” ya acierta 95% — por eso se compara contra la <strong>tasa base</strong> y se miran precisión/recall.</li>
+</ul>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copiado");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copiado");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
