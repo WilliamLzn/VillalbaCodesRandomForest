@@ -1,0 +1,539 @@
+---
+title: "El árbol de decisión por dentro: argumentos, ejecución y métricas"
+subtitle: "Laboratorio de Python paso a paso · Machine Learning · Corte 3 · UTB 2026-II"
+author: "Jorge Luis Villalba Acevedo"
+date: today
+lang: es
+bibliography: ../bib_corte2.bib
+
+title-slide-attributes:
+  data-background-image: ../../00_recursos/Imgs/banner.jpg
+  data-background-size: contain
+  data-background-opacity: "0.3"
+
+format:
+  revealjs:
+    theme: simple
+    css: ../../00_recursos/estilo_slides.css
+    embed-resources: true
+    slide-number: true
+    width: 1600
+    height: 900
+    scrollable: true
+    #logo: ../../00_recursos/Imgs/LFCBUTB2.png
+    footer: "Machine Learning · UTB 2026-II"
+  beamer:
+    theme: Madrid
+    include-in-header:
+      - text: |
+          \usepackage{fancyvrb}
+      - ../../00_recursos/beamer_utb.tex
+    slide-level: 2
+    aspectratio: 169
+crossref:
+  fig-title: Figura
+  tbl-title: Tabla
+  fig-prefix: figura
+  tbl-prefix: tabla
+jupyter: python3
+execute:
+  echo: true
+  warning: false
+---
+
+## Intro
+
+::: {.callout-note}
+## Para qué sirve este laboratorio
+
+Abrimos `DecisionTreeClassifier`, **un solo árbol**: sus argumentos, cómo
+elige cada pregunta (lo reproduciremos **a mano** buscando el mejor corte),
+qué guarda por dentro, cómo se lee como reglas y cómo se llaman bien las
+métricas. Sobre la misma `cartera_curso.csv`.
+
+Al final lo comparamos con un **Random Forest**, que es un conjunto de muchos
+árboles como éste, para que quede clara la diferencia.
+:::
+
+## Librerías y utilidades de salida
+
+```{python}
+#| label: librerias
+#| code-summary: "Librerías y utilidades de salida"
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from IPython.display import Markdown, display
+
+from sklearn.tree import DecisionTreeClassifier, plot_tree, export_text
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import (accuracy_score, precision_score, recall_score,
+                             f1_score, confusion_matrix)
+
+plt.rcParams.update({"figure.dpi": 140, "font.size": 9,
+                     "axes.spines.top": False, "axes.spines.right": False})
+ROJO, VERDE, AZUL, NARANJA, MORADO, GRIS = ("#D81B60", "#009E73", "#0072B2",
+                                            "#E69F00", "#8E44AD", "#999999")
+
+def tabla(df, decimales=3):
+    d = df.copy()
+    for c in d.columns:
+        if pd.api.types.is_float_dtype(d[c]):
+            d[c] = d[c].map(lambda v: f"{v:.{decimales}f}")
+    cab = "| " + " | ".join(str(c) for c in d.columns) + " |"
+    sep = "|" + "|".join([":--:"] * len(d.columns)) + "|"
+    fil = ["| " + " | ".join(str(v) for v in r) + " |" for r in d.values]
+    return Markdown("\n".join([cab, sep] + fil))
+
+def texto(md):
+    display(Markdown(md))
+```
+
+## Lectura y partición determinista 
+
+```{python}
+#| label: datos
+#| code-summary: "Lectura y partición determinista (sin escalado: el árbol no lo necesita)"
+
+datos = pd.read_csv("../cartera_curso.csv", sep=";", decimal=",")
+V, OBJ = ["edad", "ingreso"], "tomo_credito"
+
+d = datos.sort_values("id_cliente").reset_index(drop=True)
+corte = int(np.floor(0.75 * len(d)))
+X_train, y_train = d.loc[:corte-1, V].values, d.loc[:corte-1, OBJ].values
+X_test,  y_test  = d.loc[corte:, V].values,   d.loc[corte:, OBJ].values
+```
+
+## Las tres fases
+
+| Fase | Código | Qué pasa en el árbol |
+|---|:---|---|
+| 1. **Construir** | `DecisionTreeClassifier(max_depth=2, ...)` | Se fija qué tanto puede crecer el árbol. |
+| 2. **Entrenar** | `.fit(X_train, y_train)` | En cada nodo prueba **todos** los cortes posibles y se queda con el que más reduce el Gini. La estructura queda en `tree_`. |
+| 3. **Usar** | `.predict(X)` | Cada cliente baja por las preguntas hasta una hoja y recibe la clase mayoritaria de esa hoja. |
+
+# Fase 1 · Los argumentos
+
+## Argumentos
+
+```{python}
+#| label: argumentos
+#| code-summary: "Pedirle al modelo sus propios argumentos"
+
+params = DecisionTreeClassifier().get_params()
+params
+```
+
+## 
+```{python}
+#| label: tbl-argumentos
+#| tbl-cap: "Argumentos de DecisionTreeClassifier. La columna «de fábrica» sale de get_params()."
+#| echo: false
+
+que_hace = {
+    "criterion":         ("cómo mide la impureza",
+                          "'gini' casi siempre; 'entropy' da árboles muy parecidos"),
+    "splitter":          ("cómo elige el umbral de cada corte",
+                          "'best' prueba todos; 'random' sortea (útil en conjuntos de árboles)"),
+    "max_depth":         ("cuántas preguntas encadenadas",
+                          "None = crece hasta hojas puras (memoriza)"),
+    "min_samples_split": ("mínimo de clientes para partir un nodo",
+                          "subirlo evita cortes sobre grupos diminutos"),
+    "min_samples_leaf":  ("mínimo de clientes en cada hoja",
+                          "subirlo suaviza la frontera"),
+    "max_leaf_nodes":    ("número máximo de hojas",
+                          "otra forma de limitar el tamaño del árbol"),
+    "min_impurity_decrease": ("ganancia mínima para aceptar un corte",
+                          "evita cortes que casi no mejoran nada"),
+    "ccp_alpha":         ("poda por costo-complejidad",
+                          "mayor que 0 = poda las ramas que no pagan su costo"),
+    "class_weight":      ("peso de cada clase",
+                          "'balanced' con clases muy desbalanceadas"),
+    "random_state":      ("semilla",
+                          "fijarla: con empates entre cortes, decide cuál se elige"),
+}
+filas = [{"argumento": f"`{k}`", "de fábrica": f"`{params[k]}`",
+          "qué controla": v[0], "cuándo tocarlo": v[1]} for k, v in que_hace.items()]
+tabla(pd.DataFrame(filas))
+```
+
+## Construcción explícita, argumento por argumento
+
+```{python}
+#| label: construir
+#| code-summary: "Construcción explícita, argumento por argumento"
+
+arbol = DecisionTreeClassifier(
+    criterion="gini",        # impureza de Gini
+    splitter="best",         # probar todos los cortes y quedarse con el mejor
+    max_depth=2,             # a lo sumo dos preguntas encadenadas
+    min_samples_leaf=5,      # ninguna hoja con menos de 5 clientes
+    random_state=0)          # reproducible
+```
+
+::: {.callout-important appearance="minimal"}
+**Árbol contra bosque en los argumentos.** El árbol **no tiene**
+`n_estimators` ni `bootstrap`: esos son del bosque, porque hablan de cuántos
+árboles hay y de cómo se muestrea para cada uno. Y en el árbol `max_features`
+viene en `None` (mira todas las variables), mientras en el bosque viene en
+`'sqrt'` (cada corte mira solo algunas, para que los árboles salgan distintos).
+:::
+
+# Fase 2 · Entrenar: cómo elige la primera pregunta
+
+## La matemática
+
+La impureza de un grupo con proporción $p$ de la clase 1 es $G = 2p(1-p)$. El
+árbol prueba cada variable y cada umbral posible, y se queda con el corte que
+minimiza el Gini ponderado:
+
+$$G_{\text{corte}} = \frac{n_{izq}}{n}\,G_{izq} + \frac{n_{der}}{n}\,G_{der}
+\qquad
+\text{ganancia} = G_{\text{raíz}} - G_{\text{corte}}$$
+
+## A mano: la búsqueda exhaustiva
+
+```{python}
+#| label: busqueda
+#| code-summary: "Probar TODOS los cortes posibles, como hace .fit()"
+
+def gini(y):
+    if len(y) == 0:
+        return 0.0
+    p = y.mean()
+    return 2 * p * (1 - p)
+
+g_raiz = gini(y_train)
+mejor = {"gp": np.inf}
+for j, nombre in enumerate(V):
+    valores = np.unique(X_train[:, j])
+    for u in (valores[:-1] + valores[1:]) / 2:        # puntos medios, como sklearn
+        izq = X_train[:, j] <= u
+        if izq.sum() < 5 or (~izq).sum() < 5:         # respeta min_samples_leaf=5
+            continue
+        gp = (izq.sum() * gini(y_train[izq]) + (~izq).sum() * gini(y_train[~izq])) / len(y_train)
+        if gp < mejor["gp"]:
+            mejor = {"variable": nombre, "umbral": u, "gp": gp}
+
+arbol.fit(X_train, y_train)
+t = arbol.tree_
+t
+```
+
+## 
+```{python}
+#| label: lectura-busqueda
+#| output: asis
+#| echo: true
+
+var_sk = V[t.feature[0]]; umb_sk = t.threshold[0]
+izq_id, der_id = t.children_left[0], t.children_right[0]
+gp_sk = (t.n_node_samples[izq_id] * t.impurity[izq_id] +
+         t.n_node_samples[der_id] * t.impurity[der_id]) / t.n_node_samples[0]
+texto(f"""
+El Gini de la raíz es **{g_raiz:.4f}**. La búsqueda a mano probó todos los
+umbrales de las dos variables y el mejor corte es **¿{mejor['variable']} ≤
+{mejor['umbral']:.2f}?**, con Gini ponderado **{mejor['gp']:.4f}** y ganancia
+**{g_raiz - mejor['gp']:.4f}**.
+
+`.fit()` eligió **¿{var_sk} ≤ {umb_sk:.2f}?**, con Gini ponderado
+**{gp_sk:.4f}**: la misma pregunta. Eso es todo lo que hace un árbol al
+entrenar: repetir esta búsqueda en cada nodo nuevo.
+
+**Por qué el umbral es un punto medio** (por ejemplo 6.55 y no 6.5 o 6.6): el
+árbol corta entre dos valores observados consecutivos, así que cualquier
+número entre ellos separa igual; scikit-learn usa el punto medio.
+""")
+```
+
+## Qué guarda el árbol: la estructura `tree_`
+
+```{python}
+#| label: tbl-estructura
+#| tbl-cap: "La estructura interna del árbol: una fila por nodo."
+#| echo: true
+
+nodos = []
+for i in range(t.node_count):
+    es_hoja = t.children_left[i] == -1
+    total = t.value[i, 0].sum()
+    nodos.append({
+        "nodo": i,
+        "tipo": "hoja" if es_hoja else "pregunta",
+        "pregunta": "—" if es_hoja else f"{V[t.feature[i]]} ≤ {t.threshold[i]:.2f}",
+        "clientes": int(t.n_node_samples[i]),
+        "proporción clase 1": t.value[i, 0][1] / total,
+        "Gini": t.impurity[i]})
+tabla(pd.DataFrame(nodos))
+```
+
+
+## Atributos principales después de .fit().
+
+```{python}
+#| label: tbl-atributos
+#| tbl-cap: "Atributos principales después de .fit()."
+#| echo: false
+
+tabla(pd.DataFrame([
+    {"atributo": "`tree_`", "qué contiene": "toda la estructura (la tabla anterior)",
+     "valor": f"{t.node_count} nodos"},
+    {"atributo": "`get_depth()`", "qué contiene": "profundidad alcanzada",
+     "valor": str(arbol.get_depth())},
+    {"atributo": "`get_n_leaves()`", "qué contiene": "número de hojas",
+     "valor": str(arbol.get_n_leaves())},
+    {"atributo": "`feature_importances_`", "qué contiene": "reducción total de Gini por variable",
+     "valor": ", ".join(f"{v}: {i:.3f}" for v, i in zip(V, arbol.feature_importances_))},
+    {"atributo": "`classes_`", "qué contiene": "orden de las columnas de predict_proba",
+     "valor": str([int(c) for c in arbol.classes_])}]))
+```
+
+# Leer el árbol: dibujo y reglas
+
+```{python}
+#| label: fig-arbol
+#| fig-cap: "El árbol entrenado. En cada caja: la pregunta, el Gini, los clientes y cómo se reparten."
+#| echo: true
+
+fig, ax = plt.subplots(figsize=(10, 4))
+plot_tree(arbol, feature_names=V, class_names=["no tomó", "sí tomó"],
+          filled=True, rounded=True, fontsize=8, ax=ax)
+plt.tight_layout(); plt.show()
+```
+
+
+## con `export_text`
+
+```{python}
+#| label: reglas
+#| output: asis
+#| code-summary: "El árbol como reglas legibles"
+
+reglas = export_text(arbol, feature_names=V, decimals=2)
+cerca = "`" * 3                       # delimitador de bloque de código en Markdown
+texto(cerca + "\n" + reglas + cerca)
+```
+
+::: {.callout-tip appearance="minimal"}
+**Esta es la ventaja que el bosque no tiene.** Un árbol se puede leer entero
+como un puñado de reglas «si... entonces». Un bosque de 200 árboles no: gana
+precisión, pero pierde esta explicación.
+:::
+
+# Fase 3 · Usar: cómo predice
+
+## la proporción
+
+La probabilidad que da un árbol es **la proporción de la clase 1 en la hoja**
+donde cae el cliente.
+
+
+```{python}
+#| label: usar
+#| code-summary: "predict_proba reconstruido con la hoja de cada cliente"
+
+hojas = arbol.apply(X_test)                          # en qué hoja cae cada cliente
+p_mano = t.value[hojas, 0, 1] / t.value[hojas, 0].sum(axis=1)
+p_mano
+p_sklearn = arbol.predict_proba(X_test)[:, 1]
+p_sklearn
+```
+
+## lectura
+
+```{python}
+#| label: lectura-usar
+#| output: asis
+#| echo: false
+
+h0 = hojas[0]
+texto(f"""
+El primer cliente de la prueba (edad {int(X_test[0,0])}, ingreso
+{X_test[0,1]:.1f}) cae en la **hoja {h0}**, donde la proporción de clientes
+que tomaron el crédito es **{p_mano[0]:.4f}**. Ésa es su probabilidad, y
+`predict_proba` devuelve exactamente eso para todos los clientes
+(**{'sí' if np.allclose(p_mano, p_sklearn) else 'no'}**).
+
+Consecuencia: un árbol de {arbol.get_n_leaves()} hojas solo puede dar
+**{arbol.get_n_leaves()} probabilidades distintas**. Todos los clientes de una
+misma hoja reciben la misma.
+""")
+```
+
+# El efecto de cada argumento
+
+## Mover un argumento a la vez, desde los valores de fábrica
+
+```{python}
+#| label: experimento
+#| code-summary: "Mover un argumento a la vez, desde los valores de fábrica"
+
+def probar(**cambio):
+    m = DecisionTreeClassifier(random_state=0, **cambio).fit(X_train, y_train)
+    return (m.get_n_leaves(), m.score(X_train, y_train), m.score(X_test, y_test))
+
+experimentos = []
+for nombre, valores in [("max_depth", [1, 2, None]),
+                        ("min_samples_leaf", [1, 5, 30]),
+                        ("ccp_alpha", [0.0, 0.005, 0.02])]:
+    for v in valores:
+        hojas_n, tr, te = probar(**{nombre: v})
+        experimentos.append({"argumento": nombre, "valor": str(v), "hojas": hojas_n,
+                             "entrenamiento": tr, "prueba": te, "brecha": tr - te})
+experimentos = pd.DataFrame(experimentos)
+```
+
+## Efecto de mover un argumento a la vez; los demás en su valor de fábrica.
+
+```{python}
+#| label: tbl-experimento
+#| tbl-cap: "Efecto de mover un argumento a la vez; los demás en su valor de fábrica."
+#| echo: false
+
+tabla(experimentos)
+```
+
+## lectura-experimento
+
+```{python}
+#| label: lectura-experimento
+#| output: asis
+#| echo: false
+
+p = experimentos[experimentos["argumento"] == "max_depth"].set_index("valor")
+c = experimentos[experimentos["argumento"] == "ccp_alpha"].set_index("valor")
+texto(f"""
+Con los valores de fábrica (`max_depth=None`) el árbol crece hasta
+**{int(p.loc['None','hojas'])} hojas**, llega a
+**{p.loc['None','entrenamiento']:.3f}** en entrenamiento y la brecha es
+**{p.loc['None','brecha']:+.3f}**: memorizó. Con `max_depth=2` bastan
+**{int(p.loc['2','hojas'])} hojas** y la prueba es
+**{p.loc['2','prueba']:.3f}**.
+
+`ccp_alpha` hace lo mismo por otro camino: **poda después de crecer**, cortando
+las ramas que no pagan su costo. Con `ccp_alpha=0.02` el árbol queda en
+**{int(c.loc['0.02','hojas'])} hojas**.
+""")
+```
+
+# Árbol contra bosque
+
+```{python}
+#| label: comparacion
+#| code-summary: "El mismo problema, un árbol contra un bosque, en 20 particiones"
+
+filas = []
+for s in range(20):
+    A, B, a, b = train_test_split(datos[V].values, datos[OBJ].values,
+                                  test_size=0.25, random_state=s)
+    filas.append({
+        "árbol": DecisionTreeClassifier(random_state=0).fit(A, a).score(B, b),
+        "bosque": RandomForestClassifier(n_estimators=200, random_state=0,
+                                         n_jobs=-1).fit(A, a).score(B, b)})
+comp = pd.DataFrame(filas)
+```
+
+
+## Comparación
+
+
+```{python}
+#| label: tbl-comparacion
+#| tbl-cap: "Un árbol y un bosque, ambos con sus argumentos de fábrica, sobre 20 particiones aleatorias."
+#| echo: false
+
+tabla(pd.DataFrame([
+    {"modelo": "Árbol de decisión (uno solo)", "exactitud media": comp["árbol"].mean(),
+     "desviación": comp["árbol"].std(ddof=1), "se puede leer como reglas": "sí"},
+    {"modelo": "Random Forest (200 árboles)", "exactitud media": comp["bosque"].mean(),
+     "desviación": comp["bosque"].std(ddof=1), "se puede leer como reglas": "no"}]))
+```
+
+
+## Comparación
+
+```{python}
+#| label: lectura-comparacion
+#| output: asis
+#| echo: false
+
+texto(f"""
+Con los dos modelos en sus valores de fábrica, el árbol solo promedia
+**{comp['árbol'].mean():.3f}** de exactitud con desviación
+**{comp['árbol'].std(ddof=1):.3f}**, y el bosque
+**{comp['bosque'].mean():.3f}** con desviación
+**{comp['bosque'].std(ddof=1):.3f}**. Promediar muchos árboles, cada uno
+entrenado con una muestra distinta, **compensa la tendencia de cada árbol a
+memorizar**. El precio es que el bosque ya no se puede leer como reglas.
+""")
+```
+
+# Las métricas: cómo se llaman bien
+
+## Métricas
+
+
+```{python}
+#| label: metricas
+#| code-summary: "Llamadas correctas, con los argumentos por su nombre"
+
+clase = arbol.predict(X_test)
+exactitud = accuracy_score(y_true=y_test, y_pred=clase)
+precision = precision_score(y_true=y_test, y_pred=clase, pos_label=1, zero_division=0)
+recall    = recall_score(y_true=y_test, y_pred=clase, pos_label=1)
+f1        = f1_score(y_true=y_test, y_pred=clase, pos_label=1)
+VN, FP, FN, VP = confusion_matrix(y_true=y_test, y_pred=clase, labels=[0, 1]).ravel()
+```
+
+## tbl-metricas
+
+```{python}
+#| label: tbl-metricas
+#| tbl-cap: "Cada métrica del árbol, su llamada y su valor."
+#| echo: false
+
+tabla(pd.DataFrame([
+    {"métrica": "exactitud", "llamada": "`accuracy_score(y_true, y_pred)`", "fórmula": "(VP+VN)/n", "valor": exactitud},
+    {"métrica": "precisión", "llamada": "`precision_score(y_true, y_pred, pos_label=1)`", "fórmula": "VP/(VP+FP)", "valor": precision},
+    {"métrica": "recall", "llamada": "`recall_score(y_true, y_pred, pos_label=1)`", "fórmula": "VP/(VP+FN)", "valor": recall},
+    {"métrica": "F1", "llamada": "`f1_score(y_true, y_pred, pos_label=1)`", "fórmula": "2PR/(P+R)", "valor": f1}]))
+```
+
+
+## Matriz
+
+
+```{python}
+#| label: matriz
+#| output: asis
+#| echo: false
+
+texto("**Matriz de confusión** con `confusion_matrix(y_true, y_pred, labels=[0, 1])`:\n\n"
+      r"$$\begin{array}{r|cc|c}"
+      r" & \textbf{pred. 0} & \textbf{pred. 1} & \textbf{total}\\ \hline"
+      rf"\textbf{{real 0}} & {VN} & {FP} & {VN+FP}\\"
+      rf"\textbf{{real 1}} & {FN} & {VP} & {FN+VP}\\ \hline"
+      rf"\textbf{{total}} & {VN+FN} & {FP+VP} & {VN+FP+FN+VP}"
+      r"\end{array}$$" "\n")
+```
+
+##
+
+::: {.callout-note}
+## Lo que usted entrega
+
+1. Renderice a **PDF** con el código visible.
+2. Responda:
+   a. Con la @tbl-estructura: ¿cuántos clientes caen en cada hoja y qué
+      probabilidad recibe un cliente de cada una?
+   b. Cambie `min_samples_leaf=5` por `1` en la búsqueda a mano y en el árbol:
+      ¿sigue coincidiendo la primera pregunta?
+   c. Copie las reglas de `export_text` y explíquelas en palabras del negocio,
+      como si se las presentara al comité de crédito.
+   d. Con la @tbl-comparacion: ¿cuándo preferiría un árbol y cuándo un bosque?
+:::
+
+
+

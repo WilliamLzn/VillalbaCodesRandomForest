@@ -1,0 +1,287 @@
+---
+title: "K vecinos más cercanos (K-NN)"
+subtitle: "Laboratorio de clase · Machine Learning · UTB 2026-II"
+author: "Jorge Luis Villalba Acevedo"
+date: today
+lang: es
+format:
+  pdf:
+    geometry: margin=2.2cm
+    toc: true
+    number-sections: true
+  html:
+    theme: cosmo
+    toc: true
+    embed-resources: true
+    code-copy: true
+jupyter: python3
+execute:
+  echo: true
+  warning: false
+---
+
+::: {.callout-note}
+## Lo que vamos a hacer hoy
+
+El mismo recorrido de la plantilla de clase, sobre **400 solicitudes de crédito
+reales de la base del laboratorio**: cargar, partir, escalar, entrenar,
+predecir, medir y **dibujar**.
+
+Con una diferencia que es el corazón de la sesión: la partición se hace de
+**dos maneras** (la del profesor, determinista; la de ustedes, aleatoria) y al
+final **se comparan los dos resultados**.
+
+Métricas de hoy: matriz de confusión, exactitud, tasa base, precisión, recall
+y F1. (ROC y AUC vienen en la clase de evaluación.)
+:::
+
+# Importar las librerías
+
+```{python}
+#| label: librerias
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import (confusion_matrix, accuracy_score,
+                             precision_score, recall_score, f1_score)
+
+plt.rcParams.update({"figure.dpi": 130, "font.size": 9})
+ROJO, VERDE = "#D55E00", "#009E73"
+```
+
+# Importar los datos
+
+```{python}
+#| label: datos
+
+datos = pd.read_csv("datos_knn_clase.csv", sep=";", decimal=",")
+print(datos.shape)
+datos.head()
+```
+
+```{python}
+#| label: explorar
+
+print(datos.dtypes, "\n")
+print(datos[["edad", "ingreso"]].describe().round(2), "\n")
+print("¿cuántos tomaron el crédito?")
+print(datos["tomo_credito"].value_counts(), "\n")
+print("proporción que SÍ tomó:", round(datos["tomo_credito"].mean(), 3))
+```
+
+::: {.callout-tip appearance="minimal"}
+**Qué mirar:** que `edad` e `ingreso` lleguen como números (si dicen `object`,
+el archivo se leyó con el separador equivocado), y **cuál es la clase
+mayoritaria**: ese porcentaje es la **tasa base**, el número que nuestro modelo
+tiene que superar.
+:::
+
+```{python}
+#| label: fig-nube
+#| fig-cap: "Los 400 clientes. Verde = tomó el crédito."
+
+fig, ax = plt.subplots(figsize=(6.5, 4))
+for cls, color, etq in [(0, ROJO, "no tomó"), (1, VERDE, "sí tomó")]:
+    d = datos[datos["tomo_credito"] == cls]
+    ax.scatter(d["edad"], d["ingreso"], c=color, s=18, alpha=0.7,
+               edgecolor="white", linewidth=0.3, label=etq)
+ax.set_xlabel("edad"); ax.set_ylabel("ingreso (millones)")
+ax.legend(frameon=False)
+plt.tight_layout(); plt.show()
+```
+
+# Partir los datos: las dos formas
+
+## Forma 1 · Determinista (la del profesor)
+
+Se ordena por el código del cliente y se toma el **primer 75 %**. Siempre da lo
+mismo, en cualquier computador.
+
+```{python}
+#| label: particion-det
+
+d = datos.sort_values("id_cliente").reset_index(drop=True)
+n_train = int(np.floor(0.75 * len(d)))
+
+X_train_d = d.loc[:n_train-1, ["edad", "ingreso"]].values
+y_train_d = d.loc[:n_train-1, "tomo_credito"].values
+X_test_d  = d.loc[n_train:, ["edad", "ingreso"]].values
+y_test_d  = d.loc[n_train:, "tomo_credito"].values
+
+print(f"entrenamiento: {len(X_train_d)} · prueba: {len(X_test_d)}")
+```
+
+## Forma 2 · Aleatoria (la de ustedes)
+
+```{python}
+#| label: particion-ale
+
+MI_SEMILLA = 0        # <<< CAMBIE ESTE NÚMERO POR LOS DOS ÚLTIMOS DÍGITOS DE SU CÓDIGO
+
+X = datos[["edad", "ingreso"]].values
+y = datos["tomo_credito"].values
+X_train_a, X_test_a, y_train_a, y_test_a = train_test_split(
+    X, y, test_size=0.25, random_state=MI_SEMILLA)
+
+print(f"entrenamiento: {len(X_train_a)} · prueba: {len(X_test_a)}")
+```
+
+# Escalar las variables
+
+La edad va de 19 a 60 y el ingreso de 1 a 9.5: **sin escalar, la edad decide
+sola quién es vecino**.
+
+```{python}
+#| label: escalar
+
+sc_d = StandardScaler().fit(X_train_d)          # ojo: fit SOLO con entrenamiento
+X_train_d_s, X_test_d_s = sc_d.transform(X_train_d), sc_d.transform(X_test_d)
+
+sc_a = StandardScaler().fit(X_train_a)
+X_train_a_s, X_test_a_s = sc_a.transform(X_train_a), sc_a.transform(X_test_a)
+
+print("antes de escalar (primer cliente):", X_train_d[0])
+print("después de escalar              :", X_train_d_s[0].round(3))
+```
+
+# Entrenar el K-NN
+
+```{python}
+#| label: entrenar
+
+K = 9
+
+modelo_d = KNeighborsClassifier(n_neighbors=K, metric="minkowski", p=2)
+modelo_d.fit(X_train_d_s, y_train_d)
+
+modelo_a = KNeighborsClassifier(n_neighbors=K, metric="minkowski", p=2)
+modelo_a.fit(X_train_a_s, y_train_a)
+
+print("modelos entrenados con k =", K)
+```
+
+# Predecir un cliente nuevo
+
+```{python}
+#| label: nuevo
+
+nuevo = [[38, 7.2]]        # 38 años, 7.2 millones de ingreso
+p = modelo_d.predict_proba(sc_d.transform(nuevo))[0, 1]
+print(f"probabilidad de que tome el crédito: {p:.3f}")
+print("clase predicha:", modelo_d.predict(sc_d.transform(nuevo))[0])
+print(f"(de los {K} vecinos más parecidos, {int(round(p*K))} tomaron el crédito)")
+```
+
+# Predecir el conjunto de prueba
+
+```{python}
+#| label: predecir
+
+y_pred_d = modelo_d.predict(X_test_d_s)
+y_pred_a = modelo_a.predict(X_test_a_s)
+
+print("primeras 10 predicciones vs. realidad (determinista):")
+print(np.concatenate((y_pred_d[:10].reshape(-1, 1),
+                      y_test_d[:10].reshape(-1, 1)), axis=1))
+```
+
+# Las métricas
+
+```{python}
+#| label: metricas
+
+def tablero(y_real, y_pred, titulo):
+    VN, FP, FN, VP = confusion_matrix(y_real, y_pred).ravel()
+    base = max(y_real.mean(), 1 - y_real.mean())
+    print(f"--- {titulo} ---")
+    print(f"                predicho NO   predicho SÍ")
+    print(f"real NO             {VN:5d}         {FP:5d}")
+    print(f"real SÍ             {FN:5d}         {VP:5d}")
+    print(f"  tasa base : {base:.3f}   <- hay que superarla")
+    print(f"  exactitud : {accuracy_score(y_real, y_pred):.3f}")
+    print(f"  precisión : {precision_score(y_real, y_pred, zero_division=0):.3f}")
+    print(f"  recall    : {recall_score(y_real, y_pred, zero_division=0):.3f}")
+    print(f"  F1        : {f1_score(y_real, y_pred, zero_division=0):.3f}\n")
+    return dict(exactitud=accuracy_score(y_real, y_pred),
+                precision=precision_score(y_real, y_pred, zero_division=0),
+                recall=recall_score(y_real, y_pred, zero_division=0),
+                F1=f1_score(y_real, y_pred, zero_division=0), base=base)
+
+m_d = tablero(y_test_d, y_pred_d, "PARTICIÓN DETERMINISTA (profesor)")
+m_a = tablero(y_test_a, y_pred_a, f"PARTICIÓN ALEATORIA (semilla {MI_SEMILLA})")
+```
+
+```{python}
+#| label: fig-comparacion
+#| fig-cap: "Las mismas métricas con las dos particiones. Parecidas, no idénticas."
+
+etq = ["exactitud", "precision", "recall", "F1"]
+x = np.arange(len(etq)); ancho = 0.36
+fig, ax = plt.subplots(figsize=(7, 3.2))
+ax.bar(x - ancho/2, [m_d[e] for e in etq], ancho, label="determinista", color="#0072B2")
+ax.bar(x + ancho/2, [m_a[e] for e in etq], ancho, label="aleatoria", color="#E69F00")
+ax.axhline(m_d["base"], ls=":", color=ROJO, lw=1.8, label="tasa base")
+ax.set_xticks(x); ax.set_xticklabels(etq); ax.set_ylim(0, 1.05)
+ax.legend(frameon=False, fontsize=8)
+for i, e in enumerate(etq):
+    ax.text(i - ancho/2, m_d[e] + .02, f"{m_d[e]:.2f}", ha="center", fontsize=7.5)
+    ax.text(i + ancho/2, m_a[e] + .02, f"{m_a[e]:.2f}", ha="center", fontsize=7.5)
+plt.tight_layout(); plt.show()
+```
+
+# Ver la frontera del modelo
+
+```{python}
+#| label: fig-frontera
+#| fig-cap: "Qué decide el modelo en cada zona del plano, con las dos particiones."
+
+def dibuja(ax, modelo, sc, X_set, y_set, titulo):
+    X_set = sc.inverse_transform(X_set)
+    X1, X2 = np.meshgrid(
+        np.arange(X_set[:, 0].min() - 2, X_set[:, 0].max() + 2, 0.25),
+        np.arange(X_set[:, 1].min() - 0.5, X_set[:, 1].max() + 0.5, 0.05))
+    Z = modelo.predict(sc.transform(np.array([X1.ravel(), X2.ravel()]).T)).reshape(X1.shape)
+    ax.contourf(X1, X2, Z, alpha=0.35, cmap=ListedColormap((ROJO, VERDE)))
+    for cls, color in [(0, ROJO), (1, VERDE)]:
+        ax.scatter(X_set[y_set == cls, 0], X_set[y_set == cls, 1],
+                   c=color, s=14, edgecolor="white", linewidth=0.3)
+    ax.set_title(titulo, fontsize=9.5)
+    ax.set_xlabel("edad"); ax.set_ylabel("ingreso")
+
+fig, axs = plt.subplots(1, 2, figsize=(11, 3.8))
+dibuja(axs[0], modelo_d, sc_d, X_train_d_s, y_train_d, "determinista (entrenamiento)")
+dibuja(axs[1], modelo_a, sc_a, X_train_a_s, y_train_a, f"aleatoria, semilla {MI_SEMILLA}")
+plt.tight_layout(); plt.show()
+```
+
+::: {.callout-important appearance="minimal"}
+**La pregunta de la sesión:** las dos fronteras se parecen pero **no son
+iguales**, y las métricas tampoco. ¿Está mal alguna de las dos? No: son dos
+muestras distintas del mismo problema. Lo que debe coincidir es la
+**conclusión**, no el tercer decimal.
+:::
+
+# Lo que ustedes entregan
+
+::: {.callout-note}
+## Instrucciones
+
+1. Cambie `MI_SEMILLA` por los **dos últimos dígitos de su código**.
+2. Renderice este documento a **PDF** (`quarto render`), con el código visible.
+3. Al final del PDF, escriba a mano sus respuestas a estas cuatro preguntas:
+
+   a. ¿Su exactitud superó la **tasa base**? ¿Por cuánto?
+   b. Compare su tablero con el de la partición determinista: ¿cuál métrica
+      cambió más y cuál menos?
+   c. Cambie `K` a 1 y vuelva a correr: ¿qué le pasó a la frontera del dibujo y
+      a la exactitud? Explique en una frase.
+   d. En este problema, ¿qué error le preocuparía más al banco: un falso
+      positivo (ofrecerle el crédito a quien no lo va a tomar) o un falso
+      negativo (no ofrecérselo a quien sí lo tomaría)? Justifique.
+:::
